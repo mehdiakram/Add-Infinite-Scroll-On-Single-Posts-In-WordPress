@@ -73,6 +73,7 @@
           }
           if (location.href != currUrl) {
             history.pushState({}, currTitle, currUrl);
+	    $(document).prop('title', currTitle);
           }
         });
       });
