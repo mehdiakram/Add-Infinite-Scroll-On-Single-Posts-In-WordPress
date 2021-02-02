@@ -1,0 +1,118 @@
+<article id="post-62" class="post-62 post type-post status-publish format-standard has-post-thumbnail hentry category-technology">
+	<header class="entry-header">
+		<h1 class="entry-title">How To Add Infinite Scroll On Single Posts In WordPress?</h1>
+		<div class="entry-meta">
+			<span class="posted-on">Posted on <a href="http://blog.centil.co/2016/04/30/how-to-add-infinite-scroll-on-single-posts-in-wordpress/" rel="bookmark"><time class="entry-date published" datetime="2016-04-30T12:28:12+00:00">April 30, 2016</time><time class="updated" datetime="2016-04-30T14:01:34+00:00">April 30, 2016</time></a></span><span class="byline"> by <span class="author vcard"><a class="url fn n" href="http://blog.centil.co/author/centilco_admin/">centilco_admin</a></span></span>		</div><!-- .entry-meta -->
+	</header><!-- .entry-header -->
+
+	<div class="entry-content">
+		<p>Infinite scroll is a feature to automatically load next article when readers reach the bottom of the first article. It is a useful feature to increase engagement on your website. The effect is more obvious on mobile devices, where it is very convenient for visitors to keep scrolling for more articles, thus retain more visitors.</p>
+<p>Because of this reason, recently I received a request to setup infinite scroll on a WordPress website. By Googling around, I found that there are some plugins to support infinite scrolling on WordPress main page. However, I couldn’t find a quick solution to fulfill my requirements below:</p>
+<ul>
+<li>WordPress website</li>
+<li>Infinite scrolling on single post page</li>
+<li>Able to dynamically change browser URL when visitor scroll up/down among different articles</li>
+</ul>
+<p>So I’ve decided to develop the feature myself and would like to share with the rest on how to do it with two simple steps. You can refer the feature demo link below, which is just a plain WordPress site using default Twenty Sixteen theme.</p>
+<p style="text-align: center; color: #0000ff;"><a href="http://demo.centil.co/infinite-scroll/2016/04/30/this-is-article-10/" target="_blank">Infinite scroll demo page</a></p>
+<h4>Step 1: Identify your article content template</h4>
+<p>First, look for your theme’s single page article template. It is the HTML template to load your single page article. For Twenty Sixteen theme, the file is at <span style="color: #0000ff;"><em>/template-parts/content-single.php</em></span>. For other themes, you might need to spend a little bit more effort. Below are a few tips to idenfity the file:</p>
+<ul>
+<li>The filename usually similar to <span style="color: #0000ff;"><em>content-single.php</em></span> and under <span style="color: #0000ff;"><em>template</em></span> folder</li>
+<li>Try to search for keyword <span style="color: #0000ff;"><em>‘&lt;article’</em></span> within your theme folder. WordPress single page article template usually wrap with <span style="color: #0000ff;"><em>‘&lt;article&gt;&lt;/article&gt;’</em></span> HTML tag</li>
+</ul>
+<p>Once you’ve found the single page article template file, insert one line of code above <span style="color: #0000ff;"><em>‘&lt;article&gt;’</em></span> tag and another two lines of code below <span style="color: #0000ff;"><em>‘&lt;/article&gt;’</em></span> as shown below:</p>
+<pre><span style="color: #ff0000;">&lt;div class="centil-post-header" style="display: none;" url="&lt;?php echo esc_url(the_permalink()); ?&gt;" title="&lt;?php echo esc_attr(the_title()); ?&gt;"&gt;&lt;/div&gt;</span>
+&lt;article&gt;
+...
+&lt;/article&gt;
+<span style="color: #ff0000;">&lt;?php $centilNextPost = get_next_post(); ?&gt;
+&lt;div class="centil-infinite-scroll" style="display: none;"&gt;&lt;?php echo $centilNextPost-&gt;ID; ?&gt;&lt;/div&gt;</span></pre>
+<h4>Step 2: Append Ajax function in theme’s functions.php</h4>
+<p>The second step is to append below codes into your WordPress theme’s functions.php file. Other than the line which is highlighted in <span style="color: #ff0000;">RED</span> below, most likely you can directly copy &amp; paste these codes. For the highlighted <span style="color: #ff0000;">RED</span> line, you’ll need to modify it to target your single page article template file earlier.</p>
+<pre>function centil_infinite_scroll($pid){
+  if (is_single()) { ?&gt;
+    &lt;script type="text/javascript" &gt;
+      jQuery(document).ready(function($) {
+
+        $(window).scroll(function() {
+          var footerPos = $('footer').last().position().top;
+          var pos = $(window).scrollTop();
+
+          // Load next article
+          if (pos+(screen.height*4) &gt; footerPos) {
+            if ($(".centil-infinite-scroll").first().hasClass('working')) {
+              return false;
+            } else {
+              $(".centil-infinite-scroll").first().addClass('working');
+            }
+
+            var centilNextPostId = $(".centil-infinite-scroll").first().text();
+            var data = {
+              'action': 'centil_is',
+              'centilNextPostId': centilNextPostId
+            };
+
+            // since 2.8 ajaxurl is always defined in the admin header and points to admin-ajax.php
+            jQuery.post('&lt;?php echo admin_url("admin-ajax.php"); ?&gt;', data, function(response) {
+              $(".centil-infinite-scroll").first().replaceWith(response);
+            }, 'html');
+          }
+
+          // Update new URL
+          var currUrl = $(".centil-post-header").first().attr("url");
+          var currTitle = $(".centil-post-header").first().attr("title");
+
+          if ($(".centil-post-header").length &gt; 1 &amp;&amp; history.pushState) {
+            for (var i=0; i&lt;$(".centil-post-header").length; i++) {
+              if (pos+(screen.height/2) &gt;= $(".centil-post-header").eq(i).next().position().top) {
+                currUrl = $(".centil-post-header").eq(i).attr("url");
+                currTitle = $(".centil-post-header").eq(i).attr("title");
+              }
+            }
+          }
+          if (location.href != currUrl) {
+            history.pushState({}, currTitle, currUrl);
+          }
+        });
+      });
+    &lt;/script&gt;
+
+  &lt;?php }
+}
+add_action( 'wp_head', 'centil_infinite_scroll' );
+
+function centil_infinite_scroll_callback() {
+
+  if (isset($_POST['centilNextPostId']) &amp;&amp; $_POST['centilNextPostId']) {
+    // The Query
+    $the_query = new WP_Query(array('p'=&gt;$_POST['centilNextPostId']));
+
+    // The Loop
+    if ( $the_query-&gt;have_posts() ) {
+      while ( $the_query-&gt;have_posts() ) {
+        $the_query-&gt;the_post();
+        <span style="color: #ff0000;">get_template_part( 'template-parts/content', 'single' );</span>
+      }
+    }
+    /* Restore original Post Data */
+    wp_reset_postdata();
+  }
+
+  wp_die();
+}
+add_action( 'wp_ajax_centil_is', 'centil_infinite_scroll_callback' );
+add_action( 'wp_ajax_nopriv_centil_is', 'centil_infinite_scroll_callback' );
+</pre>
+<p>That’s it! Your WordPress site should be able to use infinite scroll on single post page now! You can further customise these codes to include loading animation and others. The sky is the limit. <img src="http://blog.centil.co/wp-includes/images/smilies/simple-smile.png" alt=":)" class="wp-smiley" style="height: 1em; max-height: 1em;"></p>
+<p>I hope this is helpful to you and please feel free to leave your comments/suggestions if you have any.</p>
+<div class="addtoany_share_save_container addtoany_content_bottom"><div class="a2a_kit a2a_kit_size_32 addtoany_list a2a_target" id="" style="line-height: 32px;"><a class="a2a_button_facebook" href="/#facebook" title="Facebook" rel="nofollow noopener" target="_blank"><span class="a2a_svg a2a_s__default a2a_s_facebook" style="background-color: rgb(24, 119, 242);"><svg focusable="false" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#FFF" d="M17.78 27.5V17.008h3.522l.527-4.09h-4.05v-2.61c0-1.182.33-1.99 2.023-1.99h2.166V4.66c-.375-.05-1.66-.16-3.155-.16-3.123 0-5.26 1.905-5.26 5.405v3.016h-3.53v4.09h3.53V27.5h4.223z"></path></svg></span><span class="a2a_label">Facebook</span></a><a class="a2a_button_twitter" href="/#twitter" title="Twitter" rel="nofollow noopener" target="_blank"><span class="a2a_svg a2a_s__default a2a_s_twitter" style="background-color: rgb(85, 172, 238);"><svg focusable="false" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#FFF" d="M28 8.557a9.913 9.913 0 0 1-2.828.775 4.93 4.93 0 0 0 2.166-2.725 9.738 9.738 0 0 1-3.13 1.194 4.92 4.92 0 0 0-3.593-1.55 4.924 4.924 0 0 0-4.794 6.049c-4.09-.21-7.72-2.17-10.15-5.15a4.942 4.942 0 0 0-.665 2.477c0 1.71.87 3.214 2.19 4.1a4.968 4.968 0 0 1-2.23-.616v.06c0 2.39 1.7 4.38 3.952 4.83-.414.115-.85.174-1.297.174-.318 0-.626-.03-.928-.086a4.935 4.935 0 0 0 4.6 3.42 9.893 9.893 0 0 1-6.114 2.107c-.398 0-.79-.023-1.175-.068a13.953 13.953 0 0 0 7.55 2.213c9.056 0 14.01-7.507 14.01-14.013 0-.213-.005-.426-.015-.637.96-.695 1.795-1.56 2.455-2.55z"></path></svg></span><span class="a2a_label">Twitter</span></a><a class="a2a_button_google_plus" href="https://www.addtoany.com/add_to/google_plus?linkurl=http%3A%2F%2Fblog.centil.co%2F2016%2F04%2F30%2Fhow-to-add-infinite-scroll-on-single-posts-in-wordpress%2F&amp;linkname=How%20To%20Add%20Infinite%20Scroll%20On%20Single%20Posts%20In%20WordPress%3F" title="Google+" rel="nofollow" target="_blank"></a><a class="a2a_dd addtoany_share_save" href="https://www.addtoany.com/share#url=http%3A%2F%2Fblog.centil.co%2F2016%2F04%2F30%2Fhow-to-add-infinite-scroll-on-single-posts-in-wordpress%2F&amp;title=How%20To%20Add%20Infinite%20Scroll%20On%20Single%20Posts%20In%20WordPress%3F"><span class="a2a_svg a2a_s__default a2a_s_a2a" style="background-color: rgb(1, 102, 255);"><svg focusable="false" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="#FFF"><path d="M14 7h4v18h-4z"></path><path d="M7 14h18v4H7z"></path></g></svg></span><span class="a2a_label a2a_localize" data-a2a-localize="inner,Share">Share</span></a>
+<script type="text/javascript"><!--
+if(wpa2a)wpa2a.script_load();
+//--></script>
+</div></div>			</div><!-- .entry-content -->
+
+	<footer class="entry-footer">
+		<span class="cat-links">Posted in <a href="http://blog.centil.co/category/technology/" rel="category tag">Technology</a></span>	</footer><!-- .entry-footer -->
+
+	</article>
